@@ -16,6 +16,8 @@ st.markdown("""
     .stButton>button { background-color: #6D28D9; color: white; border-radius: 8px; width: 100%; }
     h1, h2, h3 { color: #A78BFA; }
     [data-testid="stMetricValue"] { color: #8B5CF6; }
+    /* Ajuste para o Radio Button ficar mais elegante */
+    div[data-testid="stRadio"] > label { font-weight: bold; color: #A78BFA; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -63,22 +65,17 @@ try:
         with st.form("add_form", clear_on_submit=True):
             f_data = st.date_input("Data", datetime.now()).strftime('%d/%m/%Y')
             
-            # --- CATEGORIAS ATUALIZADAS AQUI ---
-            f_cat = st.selectbox("Categoria", [
-                "Salário/Extra", 
-                "Moradia", 
-                "Transporte", 
-                "Alimentação", 
-                "Assinaturas/Internet",
-                "Investimentos/Reserva", 
-                "Lazer", 
-                "Saúde", 
-                "Outros"
-            ])
+            # --- CATEGORIAS EM FORMATO DE SELEÇÃO DIRETA (RADIO) ---
+            st.write("**Selecione a Categoria:**")
+            f_cat = st.radio(
+                "Categoria", 
+                ["Salário/Extra", "Moradia", "Transporte", "Alimentação", "Assinaturas/Internet", "Investimentos/Reserva", "Lazer", "Saúde", "Outros"],
+                label_visibility="collapsed"
+            )
             
-            f_desc = st.text_input("Descrição")
+            f_desc = st.text_input("Descrição (Ex: Spotify, Posto Vale, etc)")
             f_val = st.number_input("Valor", min_value=0.0, step=0.01)
-            f_tipo = st.radio("Tipo", ["Saída", "Entrada"])
+            f_tipo = st.radio("Tipo de Transação", ["Saída", "Entrada"])
             
             if st.form_submit_button("Salvar na Planilha"):
                 worksheet.append_row([f_data, f_cat, f_desc, f_val, f_tipo])
@@ -86,7 +83,7 @@ try:
                 st.rerun()
         
         st.write("---")
-        if st.button("Sair"):
+        if st.button("Sair / Logoff"):
             st.session_state['autenticado'] = False
             st.rerun()
 
@@ -141,7 +138,7 @@ try:
             hide_index=True
         )
     else:
-        st.info("Ainda não há registos para este mês.")
+        st.info("Ainda não há registros para este mês.")
 
 except Exception as e:
     st.error(f"Erro: {e}")
