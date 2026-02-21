@@ -11,7 +11,7 @@ def formatar_br(valor):
 
 def carregar_dados():
     try:
-        df = pd.read_excel('/content/Planilha.xlsx').iloc[:, :5]
+        df = pd.read_excel('Planilha.xlsx').iloc[:, :5]
         df.columns = ['Data', 'Categoria', 'Descrição', 'Valor', 'Tipo']
         df['Categoria'] = df['Categoria'].replace({'Laser': 'Lazer', 'Valentia': 'Venda'})
         df['Valor'] = pd.to_numeric(df['Valor'], errors='coerce').fillna(0).round(2)
