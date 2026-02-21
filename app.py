@@ -8,7 +8,7 @@ import gspread
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Finanças do Luis - Pro", layout="wide")
 
-# Estilo Personalizado (Azul Escuro e Roxo)
+# Estilo Personalizado
 st.markdown("""
     <style>
     .stApp { background-color: #0E1117; color: #FFFFFF; }
@@ -17,6 +17,9 @@ st.markdown("""
     h1, h2, h3 { color: #A78BFA; }
     [data-testid="stMetricValue"] { color: #8B5CF6; }
     div[data-testid="stRadio"] > label { font-weight: bold; color: #A78BFA; }
+    /* Remove setas de campos numéricos em alguns navegadores */
+    input::-webkit-outer-spin-button,
+    input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -70,20 +73,28 @@ try:
                 label_visibility="collapsed"
             )
             f_desc = st.text_input("Descrição")
-            f_val = st.number_input("Valor", min_value=0.0, step=0.01)
+            
+            # --- ALTERAÇÃO AQUI: CAMPO DE VALOR SEM BOTÕES + E - ---
+            f_val_raw = st.text_input("Valor (Ex: 91.95)")
+            
             f_tipo = st.radio("Tipo", ["Saída", "Entrada"])
             
             if st.form_submit_button("Salvar na Planilha"):
-                worksheet.append_row([f_data, f_cat, f_desc, f_val, f_tipo])
-                st.success("Salvo!")
-                st.rerun()
+                try:
+                    # Converte o texto para número trocando vírgula por ponto se necessário
+                    f_val = float(f_val_raw.replace(',', '.'))
+                    worksheet.append_row([f_data, f_cat, f_desc, f_val, f_tipo])
+                    st.success("Salvo!")
+                    st.rerun()
+                except ValueError:
+                    st.error("Por favor, digite um valor numérico válido.")
         
         if st.button("Sair / Logoff"):
             st.session_state['autenticado'] = False
             st.rerun()
 
     if not df.empty:
-        # Limpeza interna para cálculo
+        # Limpeza para cálculo
         df['Valor'] = df['Valor'].astype(str).str.replace('R$', '', regex=False).str.replace('.', '', regex=False).str.replace(',', '.', regex=False).str.strip()
         df['Valor'] = pd.to_numeric(df['Valor'], errors='coerce').fillna(0)
 
@@ -97,31 +108,28 @@ try:
 
         st.divider()
         
-        # --- RANKING E GRÁFICO (APENAS SAÍDAS) ---
-        df_saidas_only = df[df['Tipo'] == 'Saída']
-        
-        saidas_resumo = df_saidas_only.groupby('Categoria')['Valor'].sum().reset_index()
+        # Ranking e Gráfico
+        df_gastos = df[(df['Tipo'] == 'Saída') & (df['Categoria'] != 'Salário/Extra')]
+        saidas_resumo = df_gastos.groupby('Categoria')['Valor'].sum().reset_index()
         saidas_resumo = saidas_resumo.sort_values(by='Valor', ascending=False)
         
         col_g1, col_g2 = st.columns(2)
         with col_g1:
             st.subheader("🏆 Top 3 Gastos")
-            top_3 = saidas_resumo.head(3).copy()
-            medalhas = ["1º 🥇", "2º 🥈", "3º 🥉"]
-            top_3.insert(0, 'Ranking', medalhas[:len(top_3)])
-            top_3['Valor'] = top_3['Valor'].apply(formatar_moeda)
-            st.table(top_3)
+            if not saidas_resumo.empty:
+                top_3 = saidas_resumo.head(3).copy()
+                medalhas = ["1º 🥇", "2º 🥈", "3º 🥉"]
+                top_3.insert(0, 'Ranking', medalhas[:len(top_3)])
+                top_3['Valor'] = top_3['Valor'].apply(formatar_moeda)
+                st.table(top_3)
             
         with col_g2:
             st.subheader("Distribuição das Saídas")
             if not saidas_resumo.empty:
                 fig, ax = plt.subplots(facecolor='#0E1117')
                 ax.set_facecolor('#0E1117')
-                # O gráfico agora usa o dataframe que filtramos apenas com saídas
                 ax.pie(saidas_resumo['Valor'], labels=saidas_resumo['Categoria'], autopct='%1.1f%%', textprops={'color':"w"}, startangle=140)
                 st.pyplot(fig)
-            else:
-                st.info("Adicione saídas para ver o gráfico.")
 
         st.divider()
         st.subheader("📋 Histórico Detalhado")
@@ -134,8 +142,6 @@ try:
         df_visual = df.copy()
         df_visual['Valor'] = df_visual['Valor'].apply(formatar_moeda)
         st.dataframe(df_visual.style.applymap(colorir_tipo, subset=['Tipo']), use_container_width=True, hide_index=True)
-    else:
-        st.info("Sem dados para este mês.")
 
 except Exception as e:
-    st.error(f"Erro: {e}")
+    st.error(f"Erro: {e}")  st.error(f"Erro: {e}")
