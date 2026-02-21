@@ -2,81 +2,104 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
+from google.oauth2.service_account import Credentials
+import gspread
 
+# --- CONFIGURAÇÃO ---
 st.set_page_config(page_title="Finanças do Luis", layout="wide")
 
-# Função para formatar números para o padrão brasileiro (R$ 1.234,56)
-def formatar_br(valor):
-    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+# Estilo Azul e Roxo
+st.markdown("""
+    <style>
+    .stApp { background-color: #0E1117; color: #FFFFFF; }
+    [data-testid="stSidebar"] { background-color: #161B22; border-right: 2px solid #6D28D9; }
+    .stButton>button { background-color: #6D28D9; color: white; border-radius: 8px; width: 100%; }
+    h1, h2, h3 { color: #A78BFA; }
+    [data-testid="stMetricValue"] { color: #8B5CF6; }
+    </style>
+    """, unsafe_allow_html=True)
 
-def carregar_dados():
-    try:
-        # Carrega o arquivo e pula a linha de cabeçalho se ela estiver vindo como dado
-        df = pd.read_excel('Planilha.xlsx').iloc[:, :5]
-        df.columns = ['Data', 'Categoria', 'Descrição', 'Valor', 'Tipo']
+# --- CONEXÃO GOOGLE SHEETS ---
+def conectar():
+    scope = ["https://www.googleapis.com/auth/spreadsheets"]
+    creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+    client = gspread.authorize(creds)
+    return client.open_by_key(st.secrets["spreadsheet"]["id"])
+
+# --- LOGIN ---
+if 'autenticado' not in st.session_state:
+    st.session_state['autenticado'] = False
+
+if not st.session_state['autenticado']:
+    st.markdown("<h1 style='text-align: center;'>🔐 Acesso Restrito</h1>", unsafe_allow_html=True)
+    _, col_login, _ = st.columns([1, 1, 1])
+    with col_login:
+        senha_input = st.text_input("Chave de Segurança", type="password")
+        if st.button("Entrar"):
+            if senha_input == "5507(ISFhjc":
+                st.session_state['autenticado'] = True
+                st.rerun()
+    st.stop()
+
+# --- APP PRINCIPAL ---
+try:
+    sh = conectar()
+    meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+    mes_atual = meses[datetime.now().month - 1]
+    
+    st.title("📊 Painel Financeiro Luis")
+    mes_sel = st.selectbox("Selecione o Mês", meses, index=meses.index(mes_atual))
+    
+    # Carregar aba
+    worksheet = sh.worksheet(mes_sel)
+    dados = worksheet.get_all_records()
+    df = pd.DataFrame(dados)
+
+    # --- FORMULÁRIO NA LATERAL ---
+    with st.sidebar:
+        st.header("📝 Novo Registro")
+        with st.form("add_form", clear_on_submit=True):
+            f_data = st.date_input("Data", datetime.now()).strftime('%d/%m/%Y')
+            f_cat = st.selectbox("Categoria", ["Alimentação", "Transporte", "Moradia", "Lazer", "Saúde", "Salário", "Outros"])
+            f_desc = st.text_input("Descrição")
+            f_val = st.number_input("Valor", min_value=0.0, step=0.01)
+            f_tipo = st.radio("Tipo", ["Saída", "Entrada"])
+            
+            if st.form_submit_button("Salvar na Planilha"):
+                worksheet.append_row([f_data, f_cat, f_desc, f_val, f_tipo])
+                st.success("Dados salvos!")
+                st.rerun()
         
-        # Filtro para remover linhas onde a coluna Data repete a palavra "Data"
-        df = df[df['Data'].astype(str) != 'Data']
+        if st.button("Sair"):
+            st.session_state['autenticado'] = False
+            st.rerun()
+
+    # --- DASHBOARD ---
+    if not df.empty:
+        df['Valor'] = pd.to_numeric(df['Valor']).fillna(0)
+        entradas = df[df['Tipo'] == 'Entrada']['Valor'].sum()
+        saidas = df[df['Tipo'] == 'Saída']['Valor'].sum()
         
-        # Limpeza e conversão
-        df['Categoria'] = df['Categoria'].replace({'Laser': 'Lazer', 'Valentia': 'Venda'})
-        df['Valor'] = pd.to_numeric(df['Valor'], errors='coerce').fillna(0).round(2)
-        return df
-    except Exception as e:
-        # Se der erro (arquivo faltando, etc), cria um DataFrame vazio com as colunas certas
-        return pd.DataFrame(columns=['Data', 'Categoria', 'Descrição', 'Valor', 'Tipo'])
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Entradas", f"R$ {entradas:,.2f}")
+        c2.metric("Saídas", f"R$ {saidas:,.2f}")
+        c3.metric("Saldo", f"R$ {(entradas - saidas):,.2f}")
 
-df = carregar_dados()
+        st.divider()
+        
+        # Gráfico e Tabela
+        saidas_df = df[df['Tipo'] == 'Saída'].groupby('Categoria')['Valor'].sum().reset_index().sort_values('Valor', ascending=False)
+        col1, col2 = st.columns(2)
+        with col1:
+            st.table(saidas_df)
+        with col2:
+            fig, ax = plt.subplots(facecolor='#0E1117')
+            ax.pie(saidas_df['Valor'], labels=saidas_df['Categoria'], autopct='%1.1f%%', textprops={'color':"w"})
+            st.pyplot(fig)
 
-st.title("📊 Finanças do Luis")
+        st.dataframe(df, use_container_width=True)
+    else:
+        st.info("Nenhum dado encontrado para este mês.")
 
-# --- BARRA LATERAL ---
-with st.sidebar:
-    st.header("📝 Novo Registro")
-    with st.form("meu_form", clear_on_submit=True):
-        st.date_input("Data", datetime.now())
-        st.selectbox("Categoria", ["Alimentação", "Transporte", "Lazer", "Contas", "Salário", "Outros"])
-        st.text_input("Descrição")
-        st.number_input("Valor", min_value=0.0, step=0.01)
-        st.radio("Tipo", ["Saída", "Entrada"])
-        if st.form_submit_button("Salvar"):
-            st.success("Dados prontos!")
-
-# --- MÉTRICAS ---
-entradas = df[df['Tipo'] == 'Entrada']['Valor'].sum()
-gastos = df[df['Tipo'] == 'Saída']['Valor'].sum()
-saldo = entradas - gastos
-
-c1, c2, c3 = st.columns(3)
-c1.metric("Total Entradas", formatar_br(entradas))
-c2.metric("Total Gastos", formatar_br(gastos))
-c3.metric("Saldo Atual", formatar_br(saldo))
-
-st.divider()
-
-# --- GRÁFICO E RESUMO ---
-gastos_df = df[df['Tipo'] == 'Saída']
-if not gastos_df.empty:
-    resumo = gastos_df.groupby('Categoria')['Valor'].sum().reset_index()
-    col_tab, col_pie = st.columns([1, 1])
-    with col_tab:
-        st.subheader("Valores por Categoria")
-        resumo_view = resumo.copy()
-        resumo_view['Valor'] = resumo_view['Valor'].apply(formatar_br)
-        st.table(resumo_view)
-    with col_pie:
-        fig, ax = plt.subplots(figsize=(4, 4))
-        ax.pie(resumo['Valor'], labels=resumo['Categoria'], autopct='%1.1f%%', startangle=140)
-        st.pyplot(fig)
-
-st.divider()
-st.subheader("📋 Histórico Completo")
-
-df_visual = df.copy()
-df_visual['Valor'] = df_visual['Valor'].apply(formatar_br)
-
-st.dataframe(
-    df_visual.style.set_properties(**{'text-align': 'left'}), 
-    use_container_width=True,
-    hide_index=True
-)
+except Exception as e:
+    st.error(f"Erro: {e}. Verifique se a aba '{mes_sel}' existe na planilha.")
