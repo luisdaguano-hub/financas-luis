@@ -75,17 +75,58 @@ try:
             st.rerun()
 
     # --- DASHBOARD ---
-    if not df.empty:
-        df['Valor'] = pd.to_numeric(df['Valor']).fillna(0)
-        entradas = df[df['Tipo'] == 'Entrada']['Valor'].sum()
-        saidas = df[df['Tipo'] == 'Saída']['Valor'].sum()
-        
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Entradas", f"R$ {entradas:,.2f}")
-        c2.metric("Saídas", f"R$ {saidas:,.2f}")
-        c3.metric("Saldo", f"R$ {(entradas - saidas):,.2f}")
+   # --- DENTRO DO SEU APP.PY, NA PARTE DO DASHBOARD ---
 
-        st.divider()
+if not df.empty:
+    # 1. Limpeza interna (o Python precisa disso para calcular)
+    df['Valor'] = (
+        df['Valor'].astype(str)
+        .str.replace('R$', '', regex=False)
+        .str.replace('.', '', regex=False)
+        .str.replace(',', '.', regex=False)
+        .str.strip()
+    )
+    df['Valor'] = pd.to_numeric(df['Valor'], errors='coerce').fillna(0)
+
+    # 2. Cálculos
+    entradas = df[df['Tipo'] == 'Entrada']['Valor'].sum()
+    saidas = df[df['Tipo'] == 'Saída']['Valor'].sum()
+    saldo = entradas - saidas
+
+    # 3. FUNÇÃO PARA VOLTAR PARA FORMATO BRASILEIRO (R$ 1.200,50)
+    def formatar_moeda(valor):
+        return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+    # 4. EXIBIÇÃO NAS MÉTRICAS (Agora com R$ e vírgula)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total Entradas", formatar_moeda(entradas))
+    c2.metric("Total Saídas", formatar_moeda(saidas))
+    c3.metric("Saldo Atual", formatar_moeda(saldo))
+
+    st.divider()
+
+    # 5. AJUSTE NA TABELA DE CATEGORIAS
+    saidas_df = df[df['Tipo'] == 'Saída'].groupby('Categoria')['Valor'].sum().reset_index().sort_values('Valor', ascending=False)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Resumo por Categoria")
+        # Criando uma cópia para exibição com R$
+        exibir_df = saidas_df.copy()
+        exibir_df['Valor'] = exibir_df['Valor'].apply(formatar_moeda)
+        st.table(exibir_df)
+    
+    with col2:
+        st.subheader("Distribuição")
+        fig, ax = plt.subplots(facecolor='#0E1117')
+        ax.pie(saidas_df['Valor'], labels=saidas_df['Categoria'], autopct='%1.1f%%', textprops={'color':"w"})
+        st.pyplot(fig)
+
+    # 6. HISTÓRICO DETALHADO (Também formatado)
+    st.subheader("📋 Histórico Completo")
+    df_visual = df.copy()
+    df_visual['Valor'] = df_visual['Valor'].apply(formatar_moeda)
+    st.dataframe(df_visual, use_container_width=True, hide_index=True)
         
         # Gráfico e Tabela
         saidas_df = df[df['Tipo'] == 'Saída'].groupby('Categoria')['Valor'].sum().reset_index().sort_values('Valor', ascending=False)
