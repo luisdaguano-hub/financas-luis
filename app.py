@@ -144,4 +144,4 @@ try:
         st.dataframe(df_visual.style.applymap(colorir_tipo, subset=['Tipo']), use_container_width=True, hide_index=True)
 
 except Exception as e:
-    st.error(f"Erro: {e}")  st.error(f"Erro: {e}")
+    st.error(f"Erro: {e}")
