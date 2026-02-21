@@ -89,9 +89,12 @@ try:
 
         st.divider()
         
-        # 1. AJUSTE: TOP GASTOS (Ordenando do maior para o menor)
+        # --- AJUSTE: RANKING NUMERADO (1º, 2º, 3º...) ---
         saidas_df = df[df['Tipo'] == 'Saída'].groupby('Categoria')['Valor'].sum().reset_index()
-        saidas_df = saidas_df.sort_values(by='Valor', ascending=False) # Top 1 no topo
+        saidas_df = saidas_df.sort_values(by='Valor', ascending=False)
+        
+        # Criando a coluna de posição
+        saidas_df.insert(0, 'Ranking', [f"{i+1}º" for i in range(len(saidas_df))])
         
         col_g1, col_g2 = st.columns(2)
         with col_g1:
@@ -103,13 +106,13 @@ try:
         with col_g2:
             st.subheader("Distribuição")
             fig, ax = plt.subplots(facecolor='#0E1117')
+            ax.set_facecolor('#0E1117')
             ax.pie(saidas_df['Valor'], labels=saidas_df['Categoria'], autopct='%1.1f%%', textprops={'color':"w"}, startangle=140)
             st.pyplot(fig)
 
         st.divider()
         st.subheader("📋 Histórico Detalhado")
 
-        # 2. AJUSTE: CORES VERDE E VERMELHO NA TABELA
         def colorir_tipo(valor):
             if valor == 'Entrada': return 'color: #00FF00; font-weight: bold'
             elif valor == 'Saída': return 'color: #FF4B4B; font-weight: bold'
@@ -118,7 +121,6 @@ try:
         df_visual = df.copy()
         df_visual['Valor'] = df_visual['Valor'].apply(formatar_moeda)
         
-        # Aplicando a cor na coluna 'Tipo'
         st.dataframe(
             df_visual.style.applymap(colorir_tipo, subset=['Tipo']),
             use_container_width=True,
