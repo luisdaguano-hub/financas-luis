@@ -47,111 +47,142 @@ if not st.session_state['autenticado']:
                 st.rerun()
     st.stop()
 
-# --- APP PRINCIPAL ---
-try:
-    sh = conectar()
-    meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", 
-             "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
-    mes_atual = meses[datetime.now().month - 1]
+# --- NAVEGAÇÃO ---
+with st.sidebar:
+    st.title("🚀 Navegação")
+    pagina = st.radio("Ir para:", ["Painel Mensal", "Evolução Anual"])
+    st.divider()
+
+# --- PÁGINA: PAINEL MENSAL ---
+if pagina == "Painel Mensal":
+    try:
+        sh = conectar()
+        meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", 
+                 "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+        mes_atual = meses[datetime.now().month - 1]
+        
+        st.title("📊 Painel Financeiro - Mensal")
+        mes_sel = st.selectbox("Selecione o Mês", meses, index=meses.index(mes_atual))
+
+        worksheet = sh.worksheet(mes_sel)
+        dados = worksheet.get_all_records()
+        df = pd.DataFrame(dados)
+
+        with st.sidebar:
+            st.header("📝 Novo Registro")
+            with st.form("add_form", clear_on_submit=True):
+                f_data = st.date_input("Data", datetime.now()).strftime('%d/%m/%Y')
+                f_cat = st.radio("Categoria", ["Salário/Extra", "Moradia", "Transporte", "Alimentação", "Assinaturas/Internet", "Investimentos/Reserva", "Lazer", "Saúde", "Outros"], label_visibility="collapsed")
+                f_desc = st.text_input("Descrição")
+                f_val_raw = st.text_input("Valor (Ex: 91.95)")
+                f_tipo = st.radio("Tipo", ["Saída", "Entrada"])
+                
+                if st.form_submit_button("Salvar na Planilha"):
+                    try:
+                        f_val = float(f_val_raw.replace(',', '.'))
+                        worksheet.append_row([f_data, f_cat, f_desc, f_val, f_tipo])
+                        st.success("Salvo!")
+                        st.rerun()
+                    except ValueError: st.error("Valor inválido.")
+            
+            if st.button("Sair / Logoff"):
+                st.session_state['autenticado'] = False
+                st.rerun()
+
+        if not df.empty:
+            df['Valor'] = pd.to_numeric(df['Valor'].astype(str).str.replace('R$', '').str.replace('.', '').str.replace(',', '.'), errors='coerce').fillna(0)
+            entradas = df[df['Tipo'] == 'Entrada']['Valor'].sum()
+            saidas = df[df['Tipo'] == 'Saída']['Valor'].sum()
+            
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Total Entradas", formatar_moeda(entradas))
+            c2.metric("Total Saídas", formatar_moeda(saidas))
+            c3.metric("Saldo Atual", formatar_moeda(entradas - saidas))
+            st.divider()
+            
+            col_rank, col_pizza, col_barras = st.columns(3)
+            df_gastos = df[(df['Tipo'] == 'Saída') & (df['Categoria'] != 'Salário/Extra')]
+            saidas_resumo = df_gastos.groupby('Categoria')['Valor'].sum().reset_index().sort_values(by='Valor', ascending=False)
+            
+            with col_rank:
+                st.subheader("🏆 Top 3 Gastos")
+                if not saidas_resumo.empty:
+                    top_3 = saidas_resumo.head(3).copy()
+                    top_3.insert(0, 'Ranking', ["1º 🥇", "2º 🥈", "3º 🥉"][:len(top_3)])
+                    top_3['Valor'] = top_3['Valor'].apply(formatar_moeda)
+                    st.table(top_3)
+                else: st.info("Sem gastos.")
+            
+            with col_pizza:
+                st.subheader("Distribuição")
+                if not saidas_resumo.empty:
+                    fig_p, ax_p = plt.subplots(facecolor='#0E1117')
+                    ax_p.set_facecolor('#0E1117')
+                    ax_p.pie(saidas_resumo['Valor'], labels=saidas_resumo['Categoria'], autopct='%1.1f%%', textprops={'color':"w"}, startangle=140)
+                    st.pyplot(fig_p)
+
+            with col_barras:
+                st.subheader("Entrada vs Saída")
+                fig_b, ax_b = plt.subplots(facecolor='#0E1117')
+                ax_b.set_facecolor('#0E1117')
+                ax_b.bar(['Entradas', 'Saídas'], [entradas, saidas], color=['#00FF00', '#FF4B4B'])
+                ax_b.tick_params(colors='white')
+                st.pyplot(fig_b)
+
+            st.divider()
+            st.subheader("📋 Histórico Detalhado")
+            df_visual = df.copy()
+            df_visual['Valor'] = df_visual['Valor'].apply(formatar_moeda)
+            st.dataframe(df_visual.style.applymap(lambda v: 'color: #00FF00' if v == 'Entrada' else 'color: #FF4B4B', subset=['Tipo']), use_container_width=True, hide_index=True)
+    except Exception as e: st.error(f"Erro: {e}")
+
+# --- PÁGINA: EVOLUÇÃO ANUAL ---
+elif pagina == "Evolução Anual":
+    st.title("📈 Evolução Anual")
+    st.write("Acompanhe o desempenho do seu dinheiro ao longo dos meses.")
     
-    st.title("📊 Painel Financeiro - Luis Felipe")
-    mes_sel = st.selectbox("Selecione o Mês", meses, index=meses.index(mes_atual))
+    try:
+        sh = conectar()
+        meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+        dados_ano = []
 
-    worksheet = sh.worksheet(mes_sel)
-    dados = worksheet.get_all_records()
-    df = pd.DataFrame(dados)
+        # Coletando dados de cada aba
+        for mes in meses:
+            try:
+                ws = sh.worksheet(mes)
+                df_mes = pd.DataFrame(ws.get_all_records())
+                if not df_mes.empty:
+                    df_mes['Valor'] = pd.to_numeric(df_mes['Valor'].astype(str).str.replace('R$', '').str.replace('.', '').str.replace(',', '.'), errors='coerce').fillna(0)
+                    ent = df_mes[df_mes['Tipo'] == 'Entrada']['Valor'].sum()
+                    sai = df_mes[df_mes['Tipo'] == 'Saída']['Valor'].sum()
+                    dados_ano.append({"Mês": mes, "Entradas": ent, "Saídas": sai, "Saldo": ent - sai})
+            except: continue
 
-    with st.sidebar:
-        st.header("📝 Novo Registro")
-        with st.form("add_form", clear_on_submit=True):
-            f_data = st.date_input("Data", datetime.now()).strftime('%d/%m/%Y')
-            st.write("**Selecione a Categoria:**")
-            f_cat = st.radio(
-                "Categoria", 
-                ["Salário/Extra", "Moradia", "Transporte", "Alimentação", "Assinaturas/Internet", "Investimentos/Reserva", "Lazer", "Saúde", "Outros"],
-                label_visibility="collapsed"
-            )
-            f_desc = st.text_input("Descrição")
-            f_val_raw = st.text_input("Valor (Ex: 91.95)")
-            f_tipo = st.radio("Tipo", ["Saída", "Entrada"])
+        if dados_ano:
+            df_ano = pd.DataFrame(dados_ano)
             
-            if st.form_submit_button("Salvar na Planilha"):
-                try:
-                    f_val = float(f_val_raw.replace(',', '.'))
-                    worksheet.append_row([f_data, f_cat, f_desc, f_val, f_tipo])
-                    st.success("Salvo!")
-                    st.rerun()
-                except ValueError:
-                    st.error("Digite um valor válido.")
-        
-        if st.button("Sair / Logoff"):
-            st.session_state['autenticado'] = False
-            st.rerun()
-
-    if not df.empty:
-        df['Valor'] = df['Valor'].astype(str).str.replace('R$', '', regex=False).str.replace('.', '', regex=False).str.replace(',', '.', regex=False).str.strip()
-        df['Valor'] = pd.to_numeric(df['Valor'], errors='coerce').fillna(0)
-
-        entradas = df[df['Tipo'] == 'Entrada']['Valor'].sum()
-        saidas = df[df['Tipo'] == 'Saída']['Valor'].sum()
-        
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Total Entradas", formatar_moeda(entradas))
-        c2.metric("Total Saídas", formatar_moeda(saidas))
-        c3.metric("Saldo Atual", formatar_moeda(entradas - saidas))
-
-        st.divider()
-        
-        # --- COLUNAS PARA O RANKING E OS GRÁFICOS ---
-        col_rank, col_pizza, col_barras = st.columns([1, 1, 1])
-        
-        df_gastos = df[(df['Tipo'] == 'Saída') & (df['Categoria'] != 'Salário/Extra')]
-        saidas_resumo = df_gastos.groupby('Categoria')['Valor'].sum().reset_index().sort_values(by='Valor', ascending=False)
-        
-        with col_rank:
-            st.subheader("🏆 Top 3 Gastos")
-            if not saidas_resumo.empty:
-                top_3 = saidas_resumo.head(3).copy()
-                top_3.insert(0, 'Ranking', ["1º 🥇", "2º 🥈", "3º 🥉"][:len(top_3)])
-                top_3['Valor'] = top_3['Valor'].apply(formatar_moeda)
-                st.table(top_3)
-            else: st.info("Sem gastos.")
+            # Gráfico de Evolução (Linha e Pontos)
+            fig_ev, ax_ev = plt.subplots(figsize=(10, 5), facecolor='#0E1117')
+            ax_ev.set_facecolor('#0E1117')
             
-        with col_pizza:
-            st.subheader("Distribuição")
-            if not saidas_resumo.empty:
-                fig_p, ax_p = plt.subplots(facecolor='#0E1117')
-                ax_p.set_facecolor('#0E1117')
-                ax_p.pie(saidas_resumo['Valor'], labels=saidas_resumo['Categoria'], autopct='%1.1f%%', textprops={'color':"w"}, startangle=140)
-                st.pyplot(fig_p)
-
-        # --- NOVO: GRÁFICO DE PRÉDIO (BARRAS) COMPARATIVO ---
-        with col_barras:
-            st.subheader("Entrada vs Saída")
-            fig_b, ax_b = plt.subplots(facecolor='#0E1117')
-            ax_b.set_facecolor('#0E1117')
+            ax_ev.plot(df_ano['Mês'], df_ano['Entradas'], marker='o', label='Entradas', color='#00FF00', linewidth=2)
+            ax_ev.plot(df_ano['Mês'], df_ano['Saídas'], marker='o', label='Saídas', color='#FF4B4B', linewidth=2)
+            ax_ev.plot(df_ano['Mês'], df_ano['Saldo'], marker='s', label='Saldo Líquido', color='#A78BFA', linestyle='--')
             
-            categorias_comp = ['Entradas', 'Saídas']
-            valores_comp = [entradas, saidas]
-            cores = ['#00FF00', '#FF4B4B'] # Verde para entrada, Vermelho para saída
+            ax_ev.tick_params(colors='white')
+            ax_ev.legend()
+            ax_ev.grid(True, alpha=0.1)
+            st.pyplot(fig_ev)
             
-            bars = ax_b.bar(categorias_comp, valores_comp, color=cores)
-            ax_b.tick_params(axis='x', colors='white')
-            ax_b.tick_params(axis='y', colors='white')
-            # Remove bordas para ficar mais limpo
-            for spine in ax_b.spines.values(): spine.set_visible(False)
             
-            st.pyplot(fig_b)
 
-        st.divider()
-        st.subheader("📋 Histórico Detalhado")
-        def colorir_tipo(valor):
-            if valor == 'Entrada': return 'color: #00FF00; font-weight: bold'
-            elif valor == 'Saída': return 'color: #FF4B4B; font-weight: bold'
-            return ''
-        df_visual = df.copy()
-        df_visual['Valor'] = df_visual['Valor'].apply(formatar_moeda)
-        st.dataframe(df_visual.style.applymap(colorir_tipo, subset=['Tipo']), use_container_width=True, hide_index=True)
-
-except Exception as e:
-    st.error(f"Erro: {e}")
+            st.divider()
+            st.subheader("Resumo Comparativo")
+            df_ano_view = df_ano.copy()
+            for col in ['Entradas', 'Saídas', 'Saldo']:
+                df_ano_view[col] = df_ano_view[col].apply(formatar_moeda)
+            st.table(df_ano_view)
+        else:
+            st.info("Ainda não há dados suficientes para gerar a evolução anual.")
+            
+    except Exception as e: st.error(f"Erro ao carregar evolução: {e}")
