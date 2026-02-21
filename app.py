@@ -62,14 +62,30 @@ try:
         st.header("📝 Novo Registro")
         with st.form("add_form", clear_on_submit=True):
             f_data = st.date_input("Data", datetime.now()).strftime('%d/%m/%Y')
-            f_cat = st.selectbox("Categoria", ["Alimentação", "Transporte", "Moradia", "Lazer", "Saúde", "Educação", "Salário", "Outros"])
+            
+            # --- CATEGORIAS ATUALIZADAS AQUI ---
+            f_cat = st.selectbox("Categoria", [
+                "Salário/Extra", 
+                "Moradia", 
+                "Transporte", 
+                "Alimentação", 
+                "Assinaturas/Internet",
+                "Investimentos/Reserva", 
+                "Lazer", 
+                "Saúde", 
+                "Outros"
+            ])
+            
             f_desc = st.text_input("Descrição")
             f_val = st.number_input("Valor", min_value=0.0, step=0.01)
             f_tipo = st.radio("Tipo", ["Saída", "Entrada"])
+            
             if st.form_submit_button("Salvar na Planilha"):
                 worksheet.append_row([f_data, f_cat, f_desc, f_val, f_tipo])
-                st.success("Salvo!")
+                st.success("Salvo com sucesso!")
                 st.rerun()
+        
+        st.write("---")
         if st.button("Sair"):
             st.session_state['autenticado'] = False
             st.rerun()
@@ -89,11 +105,9 @@ try:
 
         st.divider()
         
-        # --- AJUSTE: RANKING NUMERADO (1º, 2º, 3º...) ---
+        # Ranking de Gastos
         saidas_df = df[df['Tipo'] == 'Saída'].groupby('Categoria')['Valor'].sum().reset_index()
         saidas_df = saidas_df.sort_values(by='Valor', ascending=False)
-        
-        # Criando a coluna de posição
         saidas_df.insert(0, 'Ranking', [f"{i+1}º" for i in range(len(saidas_df))])
         
         col_g1, col_g2 = st.columns(2)
@@ -127,7 +141,7 @@ try:
             hide_index=True
         )
     else:
-        st.info("Sem dados.")
+        st.info("Ainda não há registos para este mês.")
 
 except Exception as e:
     st.error(f"Erro: {e}")
