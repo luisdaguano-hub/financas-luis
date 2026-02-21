@@ -11,14 +11,19 @@ def formatar_br(valor):
 
 def carregar_dados():
     try:
-        df = pd.read_excel('Planilha.xlsx').iloc[:, :5]
+        # O segredo é o header=0 ou skiprows
+        # Se a primeira linha está repetida, vamos carregar ignorando-a
+        df = pd.read_excel('Planilha.xlsx', header=0).iloc[:, :5]
         df.columns = ['Data', 'Categoria', 'Descrição', 'Valor', 'Tipo']
+        
+        # Remove linhas que possam ter repetido o nome das colunas
+        df = df[df['Data'] != 'Data'] 
+        
+        # Limpeza de dados
         df['Categoria'] = df['Categoria'].replace({'Laser': 'Lazer', 'Valentia': 'Venda'})
         df['Valor'] = pd.to_numeric(df['Valor'], errors='coerce').fillna(0).round(2)
         return df
-    except:
-        return pd.DataFrame(columns=['Data', 'Categoria', 'Descrição', 'Valor', 'Tipo'])
-
+        
 df = carregar_dados()
 
 st.title("📊 Finanças do Luis")
