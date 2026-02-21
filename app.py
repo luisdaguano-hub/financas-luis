@@ -11,24 +11,26 @@ def formatar_br(valor):
 
 def carregar_dados():
     try:
-        # O segredo é o header=0 ou skiprows
-        # Se a primeira linha está repetida, vamos carregar ignorando-a
-        df = pd.read_excel('Planilha.xlsx', header=0).iloc[:, :5]
+        # Carrega o arquivo e pula a linha de cabeçalho se ela estiver vindo como dado
+        df = pd.read_excel('Planilha.xlsx').iloc[:, :5]
         df.columns = ['Data', 'Categoria', 'Descrição', 'Valor', 'Tipo']
         
-        # Remove linhas que possam ter repetido o nome das colunas
-        df = df[df['Data'] != 'Data'] 
+        # Filtro para remover linhas onde a coluna Data repete a palavra "Data"
+        df = df[df['Data'].astype(str) != 'Data']
         
-        # Limpeza de dados
+        # Limpeza e conversão
         df['Categoria'] = df['Categoria'].replace({'Laser': 'Lazer', 'Valentia': 'Venda'})
         df['Valor'] = pd.to_numeric(df['Valor'], errors='coerce').fillna(0).round(2)
         return df
-        
+    except Exception as e:
+        # Se der erro (arquivo faltando, etc), cria um DataFrame vazio com as colunas certas
+        return pd.DataFrame(columns=['Data', 'Categoria', 'Descrição', 'Valor', 'Tipo'])
+
 df = carregar_dados()
 
 st.title("📊 Finanças do Luis")
 
-# --- BARRA LATERAL (FORMULÁRIO) ---
+# --- BARRA LATERAL ---
 with st.sidebar:
     st.header("📝 Novo Registro")
     with st.form("meu_form", clear_on_submit=True):
@@ -70,12 +72,9 @@ if not gastos_df.empty:
 st.divider()
 st.subheader("📋 Histórico Completo")
 
-# --- AJUSTE DA TABELA FINAL (Alinhamento e Formatação) ---
-# Criamos uma cópia para exibição para não estragar os cálculos do gráfico
 df_visual = df.copy()
 df_visual['Valor'] = df_visual['Valor'].apply(formatar_br)
 
-# Ocultamos o índice e forçamos o alinhamento à esquerda via CSS (Styler)
 st.dataframe(
     df_visual.style.set_properties(**{'text-align': 'left'}), 
     use_container_width=True,
