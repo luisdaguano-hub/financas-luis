@@ -97,29 +97,31 @@ try:
 
         st.divider()
         
-        # --- AJUSTE: RANKING COM MEDALHAS E APENAS TOP 3 ---
-        saidas_df = df[df['Tipo'] == 'Saída'].groupby('Categoria')['Valor'].sum().reset_index()
-        saidas_df = saidas_df.sort_values(by='Valor', ascending=False).head(3) # Apenas os 3 primeiros
+        # --- RANKING E GRÁFICO (APENAS SAÍDAS) ---
+        df_saidas_only = df[df['Tipo'] == 'Saída']
         
-        # Medalhas para o pódio
-        medalhas = ["1º 🥇", "2º 🥈", "3º 🥉"]
-        saidas_df.insert(0, 'Ranking', medalhas[:len(saidas_df)])
+        saidas_resumo = df_saidas_only.groupby('Categoria')['Valor'].sum().reset_index()
+        saidas_resumo = saidas_resumo.sort_values(by='Valor', ascending=False)
         
         col_g1, col_g2 = st.columns(2)
         with col_g1:
             st.subheader("🏆 Top 3 Gastos")
-            exibir_resumo = saidas_df.copy()
-            exibir_resumo['Valor'] = exibir_resumo['Valor'].apply(formatar_moeda)
-            st.table(exibir_resumo)
+            top_3 = saidas_resumo.head(3).copy()
+            medalhas = ["1º 🥇", "2º 🥈", "3º 🥉"]
+            top_3.insert(0, 'Ranking', medalhas[:len(top_3)])
+            top_3['Valor'] = top_3['Valor'].apply(formatar_moeda)
+            st.table(top_3)
             
         with col_g2:
-            st.subheader("Distribuição Geral")
-            # Para o gráfico usamos todas as saídas (não só top 3) para ser real
-            graf_df = df[df['Tipo'] == 'Saída'].groupby('Categoria')['Valor'].sum().reset_index()
-            fig, ax = plt.subplots(facecolor='#0E1117')
-            ax.set_facecolor('#0E1117')
-            ax.pie(graf_df['Valor'], labels=graf_df['Categoria'], autopct='%1.1f%%', textprops={'color':"w"}, startangle=140)
-            st.pyplot(fig)
+            st.subheader("Distribuição das Saídas")
+            if not saidas_resumo.empty:
+                fig, ax = plt.subplots(facecolor='#0E1117')
+                ax.set_facecolor('#0E1117')
+                # O gráfico agora usa o dataframe que filtramos apenas com saídas
+                ax.pie(saidas_resumo['Valor'], labels=saidas_resumo['Categoria'], autopct='%1.1f%%', textprops={'color':"w"}, startangle=140)
+                st.pyplot(fig)
+            else:
+                st.info("Adicione saídas para ver o gráfico.")
 
         st.divider()
         st.subheader("📋 Histórico Detalhado")
