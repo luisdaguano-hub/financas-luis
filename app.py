@@ -16,7 +16,6 @@ st.markdown("""
     .stButton>button { background-color: #6D28D9; color: white; border-radius: 8px; width: 100%; }
     h1, h2, h3 { color: #A78BFA; }
     [data-testid="stMetricValue"] { color: #8B5CF6; }
-    /* Ajuste para o Radio Button ficar mais elegante */
     div[data-testid="stRadio"] > label { font-weight: bold; color: #A78BFA; }
     </style>
     """, unsafe_allow_html=True)
@@ -64,25 +63,21 @@ try:
         st.header("📝 Novo Registro")
         with st.form("add_form", clear_on_submit=True):
             f_data = st.date_input("Data", datetime.now()).strftime('%d/%m/%Y')
-            
-            # --- CATEGORIAS EM FORMATO DE SELEÇÃO DIRETA (RADIO) ---
             st.write("**Selecione a Categoria:**")
             f_cat = st.radio(
                 "Categoria", 
                 ["Salário/Extra", "Moradia", "Transporte", "Alimentação", "Assinaturas/Internet", "Investimentos/Reserva", "Lazer", "Saúde", "Outros"],
                 label_visibility="collapsed"
             )
-            
-            f_desc = st.text_input("Descrição (Ex: Spotify, Posto Vale, etc)")
+            f_desc = st.text_input("Descrição")
             f_val = st.number_input("Valor", min_value=0.0, step=0.01)
-            f_tipo = st.radio("Tipo de Transação", ["Saída", "Entrada"])
+            f_tipo = st.radio("Tipo", ["Saída", "Entrada"])
             
             if st.form_submit_button("Salvar na Planilha"):
                 worksheet.append_row([f_data, f_cat, f_desc, f_val, f_tipo])
-                st.success("Salvo com sucesso!")
+                st.success("Salvo!")
                 st.rerun()
         
-        st.write("---")
         if st.button("Sair / Logoff"):
             st.session_state['autenticado'] = False
             st.rerun()
@@ -102,23 +97,28 @@ try:
 
         st.divider()
         
-        # Ranking de Gastos
+        # --- AJUSTE: RANKING COM MEDALHAS E APENAS TOP 3 ---
         saidas_df = df[df['Tipo'] == 'Saída'].groupby('Categoria')['Valor'].sum().reset_index()
-        saidas_df = saidas_df.sort_values(by='Valor', ascending=False)
-        saidas_df.insert(0, 'Ranking', [f"{i+1}º" for i in range(len(saidas_df))])
+        saidas_df = saidas_df.sort_values(by='Valor', ascending=False).head(3) # Apenas os 3 primeiros
+        
+        # Medalhas para o pódio
+        medalhas = ["1º 🥇", "2º 🥈", "3º 🥉"]
+        saidas_df.insert(0, 'Ranking', medalhas[:len(saidas_df)])
         
         col_g1, col_g2 = st.columns(2)
         with col_g1:
-            st.subheader("🏆 Ranking de Gastos")
+            st.subheader("🏆 Top 3 Gastos")
             exibir_resumo = saidas_df.copy()
             exibir_resumo['Valor'] = exibir_resumo['Valor'].apply(formatar_moeda)
             st.table(exibir_resumo)
             
         with col_g2:
-            st.subheader("Distribuição")
+            st.subheader("Distribuição Geral")
+            # Para o gráfico usamos todas as saídas (não só top 3) para ser real
+            graf_df = df[df['Tipo'] == 'Saída'].groupby('Categoria')['Valor'].sum().reset_index()
             fig, ax = plt.subplots(facecolor='#0E1117')
             ax.set_facecolor('#0E1117')
-            ax.pie(saidas_df['Valor'], labels=saidas_df['Categoria'], autopct='%1.1f%%', textprops={'color':"w"}, startangle=140)
+            ax.pie(graf_df['Valor'], labels=graf_df['Categoria'], autopct='%1.1f%%', textprops={'color':"w"}, startangle=140)
             st.pyplot(fig)
 
         st.divider()
@@ -131,14 +131,9 @@ try:
 
         df_visual = df.copy()
         df_visual['Valor'] = df_visual['Valor'].apply(formatar_moeda)
-        
-        st.dataframe(
-            df_visual.style.applymap(colorir_tipo, subset=['Tipo']),
-            use_container_width=True,
-            hide_index=True
-        )
+        st.dataframe(df_visual.style.applymap(colorir_tipo, subset=['Tipo']), use_container_width=True, hide_index=True)
     else:
-        st.info("Ainda não há registros para este mês.")
+        st.info("Sem dados para este mês.")
 
 except Exception as e:
     st.error(f"Erro: {e}")
